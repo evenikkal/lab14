@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lab14-collector
+  labels:
+    app: lab14-collector
+spec:
+  type: ClusterIP
+  selector:
+    app: lab14-collector
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
