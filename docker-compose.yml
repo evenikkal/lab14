@@ -1,0 +1,116 @@
+version: "3.9"
+
+# Lab14 — Infrastructure skeleton
+# ФИО: Никишина Евгения Александровна, группа 221131, вариант 11
+
+services:
+
+  # ─── etcd ───────────────────────────────────────────────────────────────────
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.13
+    container_name: lab14-etcd
+    restart: unless-stopped
+    environment:
+      ETCD_NAME: "lab14-etcd"
+      ETCD_DATA_DIR: "/etcd-data"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_PEER_URLS: "http://0.0.0.0:2380"
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: "http://etcd:2380"
+      ETCD_INITIAL_CLUSTER: "lab14-etcd=http://etcd:2380"
+      ETCD_INITIAL_CLUSTER_STATE: "new"
+      ETCD_INITIAL_CLUSTER_TOKEN: "lab14-etcd-cluster"
+    ports:
+      - "2379:2379"   # client
+      - "2380:2380"   # peer
+    volumes:
+      - etcd-data:/etcd-data
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── NATS JetStream ─────────────────────────────────────────────────────────
+  nats:
+    image: nats:2.10-alpine
+    container_name: lab14-nats
+    restart: unless-stopped
+    command:
+      - "-js"                       # enable JetStream
+      - "-m"
+      - "8222"                      # monitoring port
+      - "--name"
+      - "lab14-nats"
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # monitoring / HTTP
+      - "6222:6222"   # cluster routing
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Placeholder services (uncomment / implement in П1–П7) ──────────────────
+
+  collector:
+    build: ./collector
+    container_name: lab14-collector-go
+    depends_on:
+      nats:
+        condition: service_healthy
+      etcd:
+        condition: service_healthy
+    environment:
+      NATS_URL: "nats://nats:4222"
+      ETCD_URL: "http://etcd:2379"
+      WORKER_ID: "0"
+    volumes:
+      - ./data:/data
+
+  # collector_py:
+  #   build: ./collector_py
+  #   container_name: lab14-collector-py
+  #   depends_on:
+  #     nats:
+  #       condition: service_healthy
+  #   environment:
+  #     NATS_URL: "nats://nats:4222"
+
+  # analyzer:
+  #   build: ./analyzer
+  #   container_name: lab14-analyzer
+  #   depends_on:
+  #     nats:
+  #       condition: service_healthy
+  #   ports:
+  #     - "50051:50051"   # gRPC
+
+  # dashboard:
+  #   build: ./dashboard
+  #   container_name: lab14-dashboard
+  #   depends_on:
+  #     - analyzer
+  #   ports:
+  #     - "8080:8080"
+
+  # arrow_server:
+  #   build: ./arrow_server
+  #   container_name: lab14-arrow-server
+  #   ports:
+  #     - "8815:8815"   # Arrow Flight default port
+
+  # rust_validator:
+  #   build: ./rust_validator
+  #   container_name: lab14-rust-validator
+
+volumes:
+  etcd-data:
+  nats-data:
+
+networks:
+  default:
+    name: lab14-net
